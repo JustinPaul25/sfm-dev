@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\InvestorController;
 use App\Http\Controllers\SamplingController;
+use App\Http\Controllers\FeedTypeController;
+use App\Http\Controllers\CageController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -29,6 +31,21 @@ Route::middleware(['auth'])->group(function () {
     Route::put('samplings/{sampling}', [SamplingController::class, 'update'])->name('samplings.update');
     Route::delete('samplings/{sampling}', [SamplingController::class, 'destroy'])->name('samplings.destroy');
     Route::get('samplings/report', [SamplingController::class, 'report'])->name('samplings.report');
+
+    // FeedTypeController
+    Route::get('feed-types', [FeedTypeController::class, 'index'])->name('feed-types.index');
+    Route::get('feed-types/list', [FeedTypeController::class, 'list'])->name('feed-types.list');
+    Route::post('feed-types', [FeedTypeController::class, 'store'])->name('feed-types.store');
+    Route::put('feed-types/{feedType}', [FeedTypeController::class, 'update'])->name('feed-types.update');
+    Route::delete('feed-types/{feedType}', [FeedTypeController::class, 'destroy'])->name('feed-types.destroy');
+    Route::post('feed-types/{id}/restore', [FeedTypeController::class, 'restore'])->name('feed-types.restore');
+
+    // CageController
+    Route::get('cages', [CageController::class, 'index'])->name('cages.index');
+    Route::get('cages/list', [CageController::class, 'list'])->name('cages.list');
+    Route::post('cages', [CageController::class, 'store'])->name('cages.store');
+    Route::put('cages/{cage}', [CageController::class, 'update'])->name('cages.update');
+    Route::delete('cages/{cage}', [CageController::class, 'destroy'])->name('cages.destroy');
 });
 
 
