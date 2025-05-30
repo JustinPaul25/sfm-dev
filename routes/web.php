@@ -46,6 +46,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('cages', [CageController::class, 'store'])->name('cages.store');
     Route::put('cages/{cage}', [CageController::class, 'update'])->name('cages.update');
     Route::delete('cages/{cage}', [CageController::class, 'destroy'])->name('cages.destroy');
+    Route::get('cages/{cage}/view', [CageController::class, 'show'])->name('cages.view');
 });
 
 

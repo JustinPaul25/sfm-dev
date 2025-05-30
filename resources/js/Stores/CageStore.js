@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import axios from 'axios';
+import { route } from 'ziggy-js';
 
 export const useCageStore = defineStore('cage', () => {
-    const cages = ref([]);
+    const cages = ref(null);
     const loading = ref(false);
     const error = ref(null);
     const filters = ref({

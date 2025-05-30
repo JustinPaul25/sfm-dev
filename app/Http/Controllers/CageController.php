@@ -72,4 +72,11 @@ class CageController extends Controller
             'message' => 'Cage deleted successfully'
         ]);
     }
+
+    public function show(Cage $cage)
+    {
+        return Inertia::render('Cages/View', [
+            'cage' => $cage
+        ]);
+    }
 } 

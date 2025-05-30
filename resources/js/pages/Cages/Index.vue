@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { useCageStore } from '@/Stores/CageStore';
 import { useFeedTypeStore } from '@/Stores/FeedTypeStore';
 import { useInvestorStore } from '@/Stores/InvestorStore';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import Button from '@/components/ui/button/Button.vue';
 import Input from '@/components/ui/input/Input.vue';
 import Dialog from '@/components/ui/dialog/Dialog.vue';
@@ -33,12 +33,21 @@ interface Investor {
   name: string;
 }
 
+interface PaginatedCages {
+  data: Cage[];
+  total?: number;
+  [key: string]: any;
+}
+
 const breadcrumbs = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Cages', href: '/cages' },
 ];
 
-const store = useCageStore();
+const store = useCageStore() as {
+  cages: PaginatedCages | null;
+  [key: string]: any;
+};
 const feedTypeStore = useFeedTypeStore();
 const investorStore = useInvestorStore();
 const search = ref('');
@@ -56,8 +65,6 @@ const newCage = ref<Pick<Cage, 'number_of_fingerlings' | 'feed_types_id' | 'inve
   feed_types_id: 0,
   investor_id: 0,
 });
-
-const cages = computed<any>(() => store.cages);
 
 // Weather variables and functions
 const weatherIcon = ref('🌡️');
@@ -127,8 +134,8 @@ fetchWeather();
 setInterval(fetchWeather, 30 * 60 * 1000);
 
 const filteredCages = computed<Cage[]>(() => {
-  if (!search.value) return cages.value?.data || [];
-  return (cages.value?.data || []).filter((c: Cage) =>
+  if (!search.value) return store.cages?.data || [];
+  return (store.cages?.data || []).filter((c: Cage) =>
     String(c.number_of_fingerlings).includes(search.value.toLowerCase())
   );
 });
@@ -229,10 +236,10 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-if="!cages || !cages.value || !cages.value.data || cages.value.data.length === 0">
+            <tr v-if="!store.cages || !store.cages.data || store.cages.data.length === 0">
               <td colspan="4" class="px-6 py-4 text-center text-gray-500">No cages found.</td>
             </tr>
-            <tr v-else v-for="c in cages.value.data" :key="c?.id">
+            <tr v-else v-for="c in (store.cages?.data || [])" :key="c?.id">
               <td class="px-6 py-4 whitespace-nowrap">{{ c?.number_of_fingerlings }}</td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {{ feedTypes.find(f => f.id === c?.feed_types_id)?.feed_type || c?.feed_types_id }}
@@ -241,6 +248,9 @@ onMounted(() => {
                 {{ investors.find(i => i.id === c?.investor_id)?.name || c?.investor_id }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
+                <Link :href="`/cages/${c.id}/view`">
+                  <Button variant="outline" size="sm">View</Button>
+                </Link>
                 <Button variant="secondary" size="sm" @click="openEditDialog(c)" :disabled="!c?.id">Update</Button>
                 <Button variant="destructive" size="sm" @click="confirmDelete(c?.id)" :disabled="!c?.id">Delete</Button>
               </td>
