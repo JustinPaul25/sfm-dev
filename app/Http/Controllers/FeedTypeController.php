@@ -15,8 +15,30 @@ class FeedTypeController extends Controller
 
     public function list(Request $request)
     {
-        $feedTypes = FeedType::withTrashed()->orderByDesc('created_at')->get();
-        return response()->json($feedTypes);
+        $query = FeedType::withTrashed();
+
+        if ($request->has('search')) {
+            $search = $request->get('search');
+            $query->where(function($q) use ($search) {
+                $q->where('feed_type', 'like', "%{$search}%")
+                  ->orWhere('brand', 'like', "%{$search}%");
+            });
+        }
+
+        $feedTypes = $query->orderByDesc('created_at')->paginate(10);
+
+        return response()->json([
+            'feedTypes' => [
+                'data' => $feedTypes->items(),
+                'current_page' => $feedTypes->currentPage(),
+                'last_page' => $feedTypes->lastPage(),
+                'per_page' => $feedTypes->perPage(),
+                'total' => $feedTypes->total(),
+                'from' => $feedTypes->firstItem(),
+                'to' => $feedTypes->lastItem(),
+            ],
+            'filters' => $request->only(['search', 'page'])
+        ]);
     }
 
     public function store(Request $request)

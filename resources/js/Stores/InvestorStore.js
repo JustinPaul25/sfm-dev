@@ -8,7 +8,8 @@ export const useInvestorStore = defineStore('investor', () => {
     const loading = ref(false);
     const error = ref(null);
     const filters = ref({
-        search: ''
+        search: '',
+        page: 1
     });
 
     const fetchInvestorsSelect = async () => {
@@ -59,8 +60,7 @@ export const useInvestorStore = defineStore('investor', () => {
         error.value = null;
         try {
             const response = await axios.put(route('investors.update', id), investorData);
-            // If investors.value is paginated (object with data array)
-            if (investors.value && Array.isArray(investors.value.data)) {
+            if (investors.value && investors.value.data && Array.isArray(investors.value.data)) {
                 const index = investors.value.data.findIndex(i => i.id === id);
                 if (index !== -1) {
                     investors.value.data[index] = response.data;

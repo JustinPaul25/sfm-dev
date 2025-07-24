@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Sampling;
+use App\Models\Sample;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class SamplingController extends Controller
 {
@@ -15,20 +18,33 @@ class SamplingController extends Controller
 
     public function list(Request $request)
     {
-        $query = Sampling::query();
+        $query = Sampling::with('investor')->withCount('samples');
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = $request->get('search');
             $query->where(function($q) use ($search) {
-                $q->where('doc', 'like', "%{$search}%");
+                $q->where('doc', 'like', "%{$search}%")
+                  ->orWhere('cage_no', 'like', "%{$search}%")
+                  ->orWhere('date_sampling', 'like', "%{$search}%")
+                  ->orWhereHas('investor', function($investorQuery) use ($search) {
+                      $investorQuery->where('name', 'like', "%{$search}%");
+                  });
             });
         }
 
-        $samplings = $query->paginate(10);
+        $samplings = $query->orderBy('date_sampling', 'desc')->paginate(10);
 
         return response()->json([
-            'samplings' => $samplings,
-            'filters' => $request->only(['search'])
+            'samplings' => [
+                'data' => $samplings->items(),
+                'current_page' => $samplings->currentPage(),
+                'last_page' => $samplings->lastPage(),
+                'per_page' => $samplings->perPage(),
+                'total' => $samplings->total(),
+                'from' => $samplings->firstItem(),
+                'to' => $samplings->lastItem(),
+            ],
+            'filters' => $request->only(['search', 'page'])
         ]);
     }
 
@@ -77,6 +93,351 @@ class SamplingController extends Controller
 
     public function report(Request $request)
     {
+        $samplingId = $request->get('sampling');
+        
+        if ($samplingId) {
+            // Get specific sampling data
+            $sampling = Sampling::with(['investor', 'samples'])->find($samplingId);
+            
+            if ($sampling) {
+                // Calculate summary statistics
+                $samples = $sampling->samples;
+                $totalWeight = $samples->sum('weight');
+                $totalSamples = $samples->count();
+                $avgWeight = $totalSamples > 0 ? round($totalWeight / $totalSamples, 2) : 0;
+                
+                // Get historical data for this investor
+                $historicalSamplings = Sampling::with('samples')
+                    ->where('investor_id', $sampling->investor_id)
+                    ->orderBy('date_sampling', 'asc')
+                    ->get()
+                    ->map(function ($s) {
+                        $samples = $s->samples;
+                        $totalWeight = $samples->sum('weight');
+                        $totalSamples = $samples->count();
+                        $avgWeight = $totalSamples > 0 ? round($totalWeight / $totalSamples, 2) : 0;
+                        
+                        return [
+                            'date' => $s->date_sampling,
+                            'doc' => $s->doc,
+                            'stocks' => 5000, // Default value, can be enhanced later
+                            'mortality' => 0, // Default value, can be enhanced later
+                            'present' => 5000, // Default value, can be enhanced later
+                            'abw' => $avgWeight,
+                            'wtInc' => 0, // Can be calculated from previous sampling
+                            'biomass' => round(($avgWeight * 5000) / 1000, 2), // kg
+                            'fr' => '3%', // Default value
+                            'dfr' => 32, // Default value
+                            'feed' => 0, // Default value
+                            'totalGained' => 0, // Can be calculated
+                            'fcr' => 0, // Can be calculated
+                        ];
+                    });
+                
+                $reportData = [
+                    'sampling' => [
+                        'id' => $sampling->id,
+                        'date' => $sampling->date_sampling,
+                        'investor' => $sampling->investor->name,
+                        'cageNo' => $sampling->cage_no,
+                        'doc' => $sampling->doc,
+                    ],
+                    'samples' => $samples->sortBy('sample_no')->values(),
+                    'totals' => [
+                        'totalWeight' => $totalWeight,
+                        'totalSamples' => $totalSamples,
+                        'avgWeight' => $avgWeight,
+                        'totalStocks' => 5000, // Default value
+                        'mortality' => 0, // Default value
+                        'presentStocks' => 5000, // Default value
+                        'biomass' => round(($avgWeight * 5000) / 1000, 2), // kg
+                        'feedingRate' => 3, // Default value
+                        'dailyFeedRation' => 32, // Default value
+                        'feedConsumption' => 0, // Default value
+                        'prevABW' => 0, // Can be calculated from previous sampling
+                        'prevBiomass' => 0, // Can be calculated
+                        'totalWtGained' => 0, // Can be calculated
+                        'dailyWtGained' => 0, // Can be calculated
+                        'fcr' => 0, // Can be calculated
+                    ],
+                    'history' => $historicalSamplings,
+                ];
+                
+                return Inertia::render('Samplings/SamplingReport', $reportData);
+            }
+        }
+        
+        // Fallback to mock data if no sampling ID or sampling not found
         return Inertia::render('Samplings/SamplingReport');
+    }
+
+    public function generateSamples(Request $request, Sampling $sampling)
+    {
+        // Check if sampling already has samples
+        $existingSamples = $sampling->samples()->count();
+        if ($existingSamples > 0) {
+            return response()->json([
+                'message' => 'Samples already exist for this sampling',
+                'existing_count' => $existingSamples
+            ], 400);
+        }
+
+        // Generate 30 samples with realistic weight data
+        $samples = [];
+        for ($i = 1; $i <= 30; $i++) {
+            // Generate realistic weight between 50-500 grams
+            $baseWeight = rand(150, 350); // Base weight range
+            $variation = rand(-50, 50); // Add some variation
+            $weight = max(50, $baseWeight + $variation); // Ensure minimum weight
+
+            $samples[] = [
+                'investor_id' => $sampling->investor_id,
+                'sampling_id' => $sampling->id,
+                'sample_no' => $i,
+                'weight' => $weight,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        // Insert all samples
+        Sample::insert($samples);
+
+        return response()->json([
+            'message' => '30 samples generated successfully',
+            'samples_count' => 30,
+            'sampling_id' => $sampling->id
+        ]);
+    }
+
+    public function exportReport(Request $request, $samplingId = null)
+    {
+        // If no sampling ID provided, use mock data for now
+        if (!$samplingId) {
+            return $this->exportMockReport();
+        }
+
+        // Get real sampling data
+        $sampling = Sampling::with(['investor', 'samples'])->findOrFail($samplingId);
+        
+        return $this->exportRealReport($sampling);
+    }
+
+    private function exportMockReport()
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Set title
+        $sheet->setCellValue('A1', 'SAMPLING REPORT');
+        $sheet->mergeCells('A1:F1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+
+        // Set report details
+        $sheet->setCellValue('A3', 'Date: 22-Jan-25');
+        $sheet->setCellValue('A4', 'Investor: Saline Tilapia Demo cage');
+        $sheet->setCellValue('A5', 'Cage No: 1');
+        $sheet->setCellValue('A6', 'DOC: 54');
+
+        // Sample data headers
+        $sheet->setCellValue('A8', 'No.');
+        $sheet->setCellValue('B8', 'Weight (g)');
+        $sheet->setCellValue('C8', 'No.');
+        $sheet->setCellValue('D8', 'Weight (g)');
+        $sheet->setCellValue('E8', 'No.');
+        $sheet->setCellValue('F8', 'Weight (g)');
+
+        // Sample data
+        $samples = [
+            [1, 258, 11, 260, 21, 206],
+            [2, 322, 12, 204, 22, 215],
+            [3, 230, 13, 180, 23, 231],
+            [4, 215, 14, 172, 24, 218],
+            [5, 215, 15, 218, 25, 207],
+            [6, 215, 16, 247, 26, 252],
+            [7, 232, 17, 198, 27, 261],
+            [8, 240, 18, 200, 28, 210],
+            [9, 260, 19, 153, 29, 146],
+            [10, 240, 20, 153, 30, 218],
+        ];
+
+        $row = 9;
+        foreach ($samples as $sample) {
+            $sheet->setCellValue('A' . $row, $sample[0]);
+            $sheet->setCellValue('B' . $row, $sample[1]);
+            $sheet->setCellValue('C' . $row, $sample[2]);
+            $sheet->setCellValue('D' . $row, $sample[3]);
+            $sheet->setCellValue('E' . $row, $sample[4]);
+            $sheet->setCellValue('F' . $row, $sample[5]);
+            $row++;
+        }
+
+        // Summary section
+        $summaryRow = $row + 2;
+        $sheet->setCellValue('A' . $summaryRow, 'SUMMARY');
+        $sheet->getStyle('A' . $summaryRow)->getFont()->setBold(true)->setSize(14);
+
+        $summaryData = [
+            ['Total w.t. of samples:', '6752 grams'],
+            ['Total # of samples:', '30 pcs'],
+            ['Avg. Body Weight:', '225 grams'],
+            ['Total Stocks:', '5000 pcs'],
+            ['Mortality to date:', '30 pcs'],
+            ['Present Stocks:', '5000 pcs'],
+            ['Biomass:', '1127 kgs'],
+            ['Feeding Rate:', '3%'],
+            ['Daily Feed Ration:', '32 kgs'],
+            ['Feed Consumption:', '1080 kgs'],
+            ['Previous ABW:', '161 grams'],
+            ['Previous biomass:', '803 kgs'],
+            ['Total Wt. gained:', '304 kgs'],
+            ['Daily weight gained:', '1.1 grams/day'],
+            ['Feed Conversion Ratio:', '2.0'],
+        ];
+
+        $row = $summaryRow + 1;
+        foreach ($summaryData as $item) {
+            $sheet->setCellValue('A' . $row, $item[0]);
+            $sheet->setCellValue('B' . $row, $item[1]);
+            $row++;
+        }
+
+        // Historical data
+        $historyRow = $row + 2;
+        $sheet->setCellValue('A' . $historyRow, 'HISTORICAL DATA');
+        $sheet->getStyle('A' . $historyRow)->getFont()->setBold(true)->setSize(14);
+
+        $historyHeaders = [
+            'Date', 'DOC (days)', 'Total Stocks', 'Mortality to date (pcs)', 
+            'Present Stocks (pcs)', 'ABW (grams)', 'Wt. Increment per day (grams)',
+            'Biomass (kgs)', 'Feeding Rate', 'Daily Feed Ration (kgs)',
+            'Feed Consumed (kgs)', 'Total Wt. gained (kgs)', 'FCR'
+        ];
+
+        $historyRow++;
+        $col = 'A';
+        foreach ($historyHeaders as $header) {
+            $sheet->setCellValue($col . $historyRow, $header);
+            $sheet->getStyle($col . $historyRow)->getFont()->setBold(true);
+            $col++;
+        }
+
+        $historyData = [
+            ['05-Sep-24', 1, 5000, 0, 5000, 8, 8, 40, '8%', 40, 17, 0, 0],
+            ['Oct 25, 2024', 52, 5000, 12, 4988, 48, 40, 239, '5%', 12, 330, 199, 1.7],
+            ['Nov 29, 2024', 112, 5000, 30, 5000, 161, 41, 803, '4%', 32, 375, 304, 2.0],
+            ['Jan 22, 2025', 176, 5000, 30, 5000, 225, 64, 1127, '3%', 32, 1080, 324, 2.0],
+        ];
+
+        $row = $historyRow + 1;
+        foreach ($historyData as $history) {
+            $col = 'A';
+            foreach ($history as $value) {
+                $sheet->setCellValue($col . $row, $value);
+                $col++;
+            }
+            $row++;
+        }
+
+        // Auto-size columns
+        foreach (range('A', 'M') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // Create the Excel file
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'sampling_report_' . date('Y-m-d_H-i-s') . '.xlsx';
+        
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        
+        $writer->save('php://output');
+        exit;
+    }
+
+    private function exportRealReport($sampling)
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Set title
+        $sheet->setCellValue('A1', 'SAMPLING REPORT');
+        $sheet->mergeCells('A1:F1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+
+        // Set report details
+        $sheet->setCellValue('A3', 'Date: ' . $sampling->date_sampling);
+        $sheet->setCellValue('A4', 'Investor: ' . $sampling->investor->name);
+        $sheet->setCellValue('A5', 'Cage No: ' . $sampling->cage_no);
+        $sheet->setCellValue('A6', 'DOC: ' . $sampling->doc);
+
+        // Sample data headers
+        $sheet->setCellValue('A8', 'No.');
+        $sheet->setCellValue('B8', 'Weight (g)');
+        $sheet->setCellValue('C8', 'No.');
+        $sheet->setCellValue('D8', 'Weight (g)');
+        $sheet->setCellValue('E8', 'No.');
+        $sheet->setCellValue('F8', 'Weight (g)');
+
+        // Get samples and organize them in groups of 3
+        $samples = $sampling->samples->sortBy('sample_no')->values();
+        $row = 9;
+        
+        for ($i = 0; $i < count($samples); $i += 3) {
+            $sheet->setCellValue('A' . $row, $samples[$i]->sample_no ?? '');
+            $sheet->setCellValue('B' . $row, $samples[$i]->weight ?? '');
+            
+            if (isset($samples[$i + 1])) {
+                $sheet->setCellValue('C' . $row, $samples[$i + 1]->sample_no ?? '');
+                $sheet->setCellValue('D' . $row, $samples[$i + 1]->weight ?? '');
+            }
+            
+            if (isset($samples[$i + 2])) {
+                $sheet->setCellValue('E' . $row, $samples[$i + 2]->sample_no ?? '');
+                $sheet->setCellValue('F' . $row, $samples[$i + 2]->weight ?? '');
+            }
+            
+            $row++;
+        }
+
+        // Calculate summary statistics
+        $totalWeight = $samples->sum('weight');
+        $totalSamples = $samples->count();
+        $avgWeight = $totalSamples > 0 ? round($totalWeight / $totalSamples, 2) : 0;
+
+        // Summary section
+        $summaryRow = $row + 2;
+        $sheet->setCellValue('A' . $summaryRow, 'SUMMARY');
+        $sheet->getStyle('A' . $summaryRow)->getFont()->setBold(true)->setSize(14);
+
+        $summaryData = [
+            ['Total w.t. of samples:', $totalWeight . ' grams'],
+            ['Total # of samples:', $totalSamples . ' pcs'],
+            ['Avg. Body Weight:', $avgWeight . ' grams'],
+        ];
+
+        $row = $summaryRow + 1;
+        foreach ($summaryData as $item) {
+            $sheet->setCellValue('A' . $row, $item[0]);
+            $sheet->setCellValue('B' . $row, $item[1]);
+            $row++;
+        }
+
+        // Auto-size columns
+        foreach (range('A', 'F') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // Create the Excel file
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'sampling_report_' . $sampling->id . '_' . date('Y-m-d_H-i-s') . '.xlsx';
+        
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        
+        $writer->save('php://output');
+        exit;
     }
 }

@@ -35,8 +35,16 @@ class InvestorController extends Controller
         $investors = $query->paginate(10);
 
         return response()->json([
-            'investors' => $investors,
-            'filters' => $request->only(['search'])
+            'investors' => [
+                'data' => $investors->items(),
+                'current_page' => $investors->currentPage(),
+                'last_page' => $investors->lastPage(),
+                'per_page' => $investors->perPage(),
+                'total' => $investors->total(),
+                'from' => $investors->firstItem(),
+                'to' => $investors->lastItem(),
+            ],
+            'filters' => $request->only(['search', 'page'])
         ]);
     }
 

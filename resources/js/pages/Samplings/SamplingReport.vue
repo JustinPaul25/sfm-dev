@@ -3,27 +3,25 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Head } from '@inertiajs/vue3';
 import Card from '@/components/ui/card/Card.vue';
 import Button from '@/components/ui/button/Button.vue';
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import axios from 'axios';
 
-// Mock data (replace with real API data later)
+// Props from Inertia
+const props = defineProps<{
+  sampling?: any;
+  samples?: any[];
+  totals?: any;
+  history?: any[];
+}>();
+
+// Reactive data
 const report = ref({
-  date: '22-Jan-25',
-  investor: 'Saline Tilapia Demo cage',
-  cageNo: '1',
-  doc: '54',
-  samples: [
-    { no: 1, weight: 258, no2: 11, weight2: 260, no3: 21, weight3: 206 },
-    { no: 2, weight: 322, no2: 12, weight2: 204, no3: 22, weight3: 215 },
-    { no: 3, weight: 230, no2: 13, weight2: 180, no3: 23, weight3: 231 },
-    { no: 4, weight: 215, no2: 14, weight2: 172, no3: 24, weight3: 218 },
-    { no: 5, weight: 215, no2: 15, weight2: 218, no3: 25, weight3: 207 },
-    { no: 6, weight: 215, no2: 16, weight2: 247, no3: 26, weight3: 252 },
-    { no: 7, weight: 232, no2: 17, weight2: 198, no3: 27, weight3: 261 },
-    { no: 8, weight: 240, no2: 18, weight2: 200, no3: 28, weight3: 210 },
-    { no: 9, weight: 260, no2: 19, weight2: 153, no3: 29, weight3: 146 },
-    { no: 10, weight: 240, no2: 20, weight2: 153, no3: 30, weight3: 218 },
-  ],
-  totals: {
+  date: props.sampling?.date || '22-Jan-25',
+  investor: props.sampling?.investor || 'Saline Tilapia Demo cage',
+  cageNo: props.sampling?.cageNo || '1',
+  doc: props.sampling?.doc || '54',
+  samples: props.samples || [],
+  totals: props.totals || {
     totalWeight: 6752,
     totalSamples: 30,
     avgWeight: 225,
@@ -40,7 +38,7 @@ const report = ref({
     dailyWtGained: 1.1,
     fcr: 2.0,
   },
-  history: [
+  history: props.history || [
     { date: '05-Sep-24', doc: 1, stocks: 5000, mortality: 0, present: 5000, abw: 8, wtInc: 8, doc2: 1, biomass: 40, fr: '8%', dfr: 40, feed: 17, totalGained: 0, fcr: 0 },
     { date: 'Oct 25, 2024', doc: 52, stocks: 5000, mortality: 12, present: 4988, abw: 48, wtInc: 40, doc2: 40, biomass: 239, fr: '5%', dfr: 12, feed: 330, totalGained: 199, fcr: 1.7 },
     { date: 'Nov 29, 2024', doc: 112, stocks: 5000, mortality: 30, present: 5000, abw: 161, wtInc: 41, doc2: 113, biomass: 803, fr: '4%', dfr: 32, feed: 375, totalGained: 304, fcr: 2.0 },
@@ -48,11 +46,63 @@ const report = ref({
   ],
 });
 
+// Computed properties for sample data organization
+const organizedSamples = computed(() => {
+  if (!report.value.samples || report.value.samples.length === 0) {
+    // Return mock data if no real samples
+    return [
+      { no: 1, weight: 258, no2: 11, weight2: 260, no3: 21, weight3: 206 },
+      { no: 2, weight: 322, no2: 12, weight2: 204, no3: 22, weight3: 215 },
+      { no: 3, weight: 230, no2: 13, weight2: 180, no3: 23, weight3: 231 },
+      { no: 4, weight: 215, no2: 14, weight2: 172, no3: 24, weight3: 218 },
+      { no: 5, weight: 215, no2: 15, weight2: 218, no3: 25, weight3: 207 },
+      { no: 6, weight: 215, no2: 16, weight2: 247, no3: 26, weight3: 252 },
+      { no: 7, weight: 232, no2: 17, weight2: 198, no3: 27, weight3: 261 },
+      { no: 8, weight: 240, no2: 18, weight2: 200, no3: 28, weight3: 210 },
+      { no: 9, weight: 260, no2: 19, weight2: 153, no3: 29, weight3: 146 },
+      { no: 10, weight: 240, no2: 20, weight2: 153, no3: 30, weight3: 218 },
+    ];
+  }
+
+  // Organize real samples in groups of 3
+  const samples = report.value.samples;
+  const organized = [];
+  
+  for (let i = 0; i < samples.length; i += 3) {
+    const row = {
+      no: samples[i]?.sample_no || '',
+      weight: samples[i]?.weight || '',
+      no2: samples[i + 1]?.sample_no || '',
+      weight2: samples[i + 1]?.weight || '',
+      no3: samples[i + 2]?.sample_no || '',
+      weight3: samples[i + 2]?.weight || '',
+    };
+    organized.push(row);
+  }
+  
+  return organized;
+});
+
 const breadcrumbs = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Samplings', href: '/samplings' },
   { title: 'Sampling Report', href: '/samplings/report' },
 ];
+
+const printReport = () => {
+  window.print();
+};
+
+const exportToExcel = () => {
+  // Export the specific sampling report if available
+  const samplingId = props.sampling?.id;
+  if (samplingId) {
+    window.open(route('samplings.export-report', samplingId), '_blank');
+  } else {
+    // Fallback to mock report
+    window.open(route('samplings.export-report'), '_blank');
+  }
+};
 </script>
 
 <template>
@@ -68,7 +118,10 @@ const breadcrumbs = [
             <div class="text-sm text-muted-foreground">Cage No: <span class="font-medium">{{ report.cageNo }}</span></div>
             <div class="text-sm text-muted-foreground">DOC: <span class="font-medium">{{ report.doc }}</span></div>
           </div>
-          <Button variant="secondary">Export to Excel</Button>
+          <div class="flex gap-2">
+            <Button variant="outline" @click="printReport">🖨️ Print Report</Button>
+            <Button variant="secondary" @click="exportToExcel">📊 Export to Excel</Button>
+          </div>
         </div>
         <div class="overflow-x-auto rounded-xl border border-sidebar-border/70 bg-white dark:bg-gray-900 mb-6">
           <table class="min-w-full text-xs md:text-sm">
@@ -83,7 +136,7 @@ const breadcrumbs = [
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in report.samples" :key="row.no">
+              <tr v-for="row in organizedSamples" :key="row.no">
                 <td class="px-2 py-1">{{ row.no }}</td>
                 <td class="px-2 py-1">{{ row.weight }}</td>
                 <td class="px-2 py-1">{{ row.no2 }}</td>
@@ -167,4 +220,21 @@ const breadcrumbs = [
       </Card>
     </div>
   </AppLayout>
-</template> 
+</template>
+
+<style scoped>
+@media print {
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+  
+  table {
+    border-collapse: collapse !important;
+  }
+  
+  th, td {
+    border: 1px solid #000 !important;
+  }
+}
+</style> 

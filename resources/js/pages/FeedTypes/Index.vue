@@ -21,8 +21,25 @@ const breadcrumbs = [
 const store = useFeedTypeStore();
 const { feedTypes, loading, error } = storeToRefs(store);
 
+const search = ref('');
+
 // Ensure feedTypes is always an array for template safety
-const feedTypesSafe = computed(() => Array.isArray(feedTypes.value) ? feedTypes.value : []);
+const feedTypesSafe = computed(() => {
+  const data = feedTypes.value;
+  return data?.data || [];
+});
+
+const pagination = computed(() => {
+  const data = feedTypes.value;
+  return data?.current_page ? {
+    current_page: data.current_page,
+    last_page: data.last_page,
+    per_page: data.per_page,
+    total: data.total,
+    from: data.from,
+    to: data.to
+  } : null;
+});
 
 const showDialog = ref(false);
 const isEdit = ref(false);
@@ -32,6 +49,41 @@ const formError = ref(null);
 onMounted(() => {
   store.fetchFeedTypes();
 });
+
+function handleSearch() {
+  store.setFilters({ search: search.value, page: 1 });
+  store.fetchFeedTypes();
+}
+
+// Pagination functions
+function goToPage(page) {
+  store.setFilters({ ...store.filters, page });
+  store.fetchFeedTypes();
+}
+
+function getPageNumbers() {
+  if (!pagination.value) return [];
+  const current = pagination.value.current_page;
+  const last = pagination.value.last_page;
+  const pages = [];
+  
+  // Always show first page
+  pages.push(1);
+  
+  // Show pages around current page
+  for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+    if (i > 1 && i < last) {
+      pages.push(i);
+    }
+  }
+  
+  // Always show last page if different from first
+  if (last > 1) {
+    pages.push(last);
+  }
+  
+  return [...new Set(pages)].sort((a, b) => a - b);
+}
 
 function openCreateDialog() {
   isEdit.value = false;
@@ -83,7 +135,10 @@ async function restoreFeedType(id) {
   <AppLayout :breadcrumbs="breadcrumbs">
     <div class="flex flex-col gap-4 p-4">
       <div class="flex items-center justify-between gap-2">
-        <h1 class="text-2xl font-bold">Feed Types</h1>
+        <div class="flex gap-2 items-center">
+          <Input v-model="search" placeholder="Search feed types..." @keyup.enter="handleSearch" class="w-64" />
+          <Button @click="handleSearch" variant="default">Search</Button>
+        </div>
         <Button @click="openCreateDialog" variant="secondary">Add Feed Type</Button>
       </div>
       <div v-if="error" class="text-red-500 mb-2">{{ error }}</div>
@@ -107,14 +162,80 @@ async function restoreFeedType(id) {
               <td class="px-6 py-4 whitespace-nowrap">{{ item.feed_type }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ item.brand }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ item.deleted_at ? item.deleted_at : '-' }}</td>
-              <td class="px-6 py-4 whitespace-nowrap text-right space-x-2">
-                <Button variant="secondary" size="sm" @click="openEditDialog(item)" :disabled="!!item.deleted_at">Edit</Button>
-                <Button v-if="!item.deleted_at" variant="destructive" size="sm" @click="deleteFeedType(item.id)">Delete</Button>
-                <Button v-else variant="default" size="sm" @click="restoreFeedType(item.id)">Restore</Button>
+              <td class="px-6 py-4 whitespace-nowrap text-right">
+                <div class="flex gap-1">
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    @click="openEditDialog(item)" 
+                    :disabled="!!item.deleted_at"
+                    title="Edit"
+                    class="w-8 h-8 p-0"
+                  >
+                    ✏️
+                  </Button>
+                  <Button 
+                    v-if="!item.deleted_at" 
+                    variant="destructive" 
+                    size="sm" 
+                    @click="deleteFeedType(item.id)"
+                    title="Delete"
+                    class="w-8 h-8 p-0"
+                  >
+                    🗑️
+                  </Button>
+                  <Button 
+                    v-else 
+                    variant="default" 
+                    size="sm" 
+                    @click="restoreFeedType(item.id)"
+                    title="Restore"
+                    class="w-8 h-8 p-0"
+                  >
+                    🔄
+                  </Button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="pagination" class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center text-sm text-gray-700 dark:text-gray-300">
+          <span>Showing {{ pagination.from }} to {{ pagination.to }} of {{ pagination.total }} results</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === 1"
+            @click="goToPage(pagination.current_page - 1)"
+          >
+            Previous
+          </Button>
+          <div class="flex items-center space-x-1">
+            <Button 
+              v-for="page in getPageNumbers()" 
+              :key="page"
+              variant="outline" 
+              size="sm"
+              :class="page === pagination.current_page ? 'bg-primary text-primary-foreground' : ''"
+              @click="goToPage(page)"
+            >
+              {{ page }}
+            </Button>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === pagination.last_page"
+            @click="goToPage(pagination.current_page + 1)"
+          >
+            Next
+          </Button>
+        </div>
       </div>
 
       <!-- Create/Edit Feed Type Dialog -->

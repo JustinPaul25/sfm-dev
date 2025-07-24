@@ -7,7 +7,8 @@ export const useSamplingStore = defineStore('sampling', () => {
     const loading = ref(false);
     const error = ref(null);
     const filters = ref({
-        search: ''
+        search: '',
+        page: 1
     });
 
     const fetchSamplings = async () => {
@@ -44,10 +45,10 @@ export const useSamplingStore = defineStore('sampling', () => {
         error.value = null;
         try {
             const response = await axios.put(route('samplings.update', id), samplingData);
-            if (samplings.value && Array.isArray(samplings.value.data)) {
+            if (samplings.value && samplings.value.data && Array.isArray(samplings.value.data)) {
                 const index = samplings.value.data.findIndex(s => s.id === id);
                 if (index !== -1) {
-                    samplings.value.data[index] = response.data;
+                    samplings.value.data[index] = response.data.sampling;
                 }
             }
             return response.data;
@@ -73,6 +74,20 @@ export const useSamplingStore = defineStore('sampling', () => {
         }
     };
 
+    const generateSamples = async (samplingId) => {
+        loading.value = true;
+        error.value = null;
+        try {
+            const response = await axios.post(route('samplings.generate-samples', samplingId));
+            return response.data;
+        } catch (e) {
+            error.value = e.message;
+            throw e;
+        } finally {
+            loading.value = false;
+        }
+    };
+
     const setFilters = (newFilters) => {
         filters.value = { ...filters.value, ...newFilters };
     };
@@ -86,6 +101,7 @@ export const useSamplingStore = defineStore('sampling', () => {
         createSampling,
         updateSampling,
         deleteSampling,
+        generateSamples,
         setFilters
     };
 });

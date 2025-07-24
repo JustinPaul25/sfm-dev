@@ -40,18 +40,56 @@ const newInvestor = ref<Pick<Investor, 'name' | 'address' | 'phone'>>({
   phone: '',
 });
 
-const filteredInvestors = computed<Investor[]>(() => {
-  if (!search.value) return store.investors as Investor[];
-  return (store.investors as Investor[]).filter(inv =>
-    inv.name.toLowerCase().includes(search.value.toLowerCase()) ||
-    inv.address.toLowerCase().includes(search.value.toLowerCase()) ||
-    inv.phone.toLowerCase().includes(search.value.toLowerCase())
-  );
+const investors = computed(() => {
+  const data = store.investors as any;
+  return data?.data || [];
+});
+
+const pagination = computed(() => {
+  const data = store.investors as any;
+  return data?.current_page ? {
+    current_page: data.current_page,
+    last_page: data.last_page,
+    per_page: data.per_page,
+    total: data.total,
+    from: data.from,
+    to: data.to
+  } : null;
 });
 
 function handleSearch() {
-  store.setFilters({ search: search.value });
+  store.setFilters({ search: search.value, page: 1 });
   store.fetchInvestors();
+}
+
+// Pagination functions
+function goToPage(page: number) {
+  store.setFilters({ ...store.filters, page });
+  store.fetchInvestors();
+}
+
+function getPageNumbers() {
+  if (!pagination.value) return [];
+  const current = pagination.value.current_page;
+  const last = pagination.value.last_page;
+  const pages = [];
+  
+  // Always show first page
+  pages.push(1);
+  
+  // Show pages around current page
+  for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+    if (i > 1 && i < last) {
+      pages.push(i);
+    }
+  }
+  
+  // Always show last page if different from first
+  if (last > 1) {
+    pages.push(last);
+  }
+  
+  return [...new Set(pages)].sort((a, b) => a - b);
 }
 
 function openCreateDialog() {
@@ -139,20 +177,78 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-if="store.investors.total === 0">
-              <td colspan="3" class="px-6 py-4 text-center text-gray-500">No investors found.</td>
+            <tr v-if="store.loading" class="animate-pulse">
+              <td colspan="4" class="px-6 py-4 text-center text-gray-500">Loading...</td>
             </tr>
-            <tr v-else v-for="inv in store.investors.data" :key="inv.id">
+            <tr v-else-if="investors.length === 0">
+              <td colspan="4" class="px-6 py-4 text-center text-gray-500">No investors found.</td>
+            </tr>
+            <tr v-else v-for="inv in investors" :key="inv.id">
               <td class="px-6 py-4 whitespace-nowrap">{{ inv.name }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ inv.address }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ inv.phone }}</td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
-                <Button variant="secondary" size="sm" @click="openEditDialog(inv)">Update</Button>
-                <Button variant="destructive" size="sm" @click="confirmDelete(inv.id)">Delete</Button>
+                <div class="flex gap-1">
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    @click="openEditDialog(inv)"
+                    title="Update"
+                    class="w-8 h-8 p-0"
+                  >
+                    ✏️
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    @click="confirmDelete(inv.id)"
+                    title="Delete"
+                    class="w-8 h-8 p-0"
+                  >
+                    🗑️
+                  </Button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="pagination" class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center text-sm text-gray-700 dark:text-gray-300">
+          <span>Showing {{ pagination.from }} to {{ pagination.to }} of {{ pagination.total }} results</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === 1"
+            @click="goToPage(pagination.current_page - 1)"
+          >
+            Previous
+          </Button>
+          <div class="flex items-center space-x-1">
+            <Button 
+              v-for="page in getPageNumbers()" 
+              :key="page"
+              variant="outline" 
+              size="sm"
+              :class="page === pagination.current_page ? 'bg-primary text-primary-foreground' : ''"
+              @click="goToPage(page)"
+            >
+              {{ page }}
+            </Button>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === pagination.last_page"
+            @click="goToPage(pagination.current_page + 1)"
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
 

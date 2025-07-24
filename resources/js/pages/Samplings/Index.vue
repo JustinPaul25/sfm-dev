@@ -22,6 +22,21 @@ interface Sampling {
   date_sampling: string;
   doc: string;
   cage_no: string;
+  samples_count?: number;
+  investor?: {
+    id: number;
+    name: string;
+  };
+}
+
+interface PaginationData {
+  data: Sampling[];
+  current_page: number;
+  last_page: number;
+  per_page: number;
+  total: number;
+  from: number;
+  to: number;
 }
 
 interface Investor {
@@ -37,6 +52,7 @@ const breadcrumbs = [
 const store = useSamplingStore();
 const investorStore = useInvestorStore();
 const search = ref('');
+const isLoading = computed(() => store.loading);
 const showCreateDialog = ref(false);
 const showDeleteDialog = ref(false);
 const deleteTargetId = ref<number|null>(null);
@@ -51,21 +67,52 @@ const newSampling = ref<Pick<Sampling, 'investor_id' | 'date_sampling' | 'doc' |
   cage_no: '',
 });
 
-const samplings = computed(() => store.samplings as Sampling[]);
-
-const filteredSamplings = computed<Sampling[]>(() => {
-  if (!search.value) return samplings.value;
-  return samplings.value.filter(s =>
-    String(s.investor_id).includes(search.value.toLowerCase()) ||
-    s.date_sampling.toLowerCase().includes(search.value.toLowerCase()) ||
-    s.doc.toLowerCase().includes(search.value.toLowerCase()) ||
-    s.cage_no.toLowerCase().includes(search.value.toLowerCase())
-  );
+const samplings = computed(() => {
+  const data = store.samplings as any;
+  return data?.data || [];
+});
+const pagination = computed(() => {
+  const data = store.samplings as any;
+  return data?.current_page ? {
+    current_page: data.current_page,
+    last_page: data.last_page,
+    per_page: data.per_page,
+    total: data.total,
+    from: data.from,
+    to: data.to
+  } : null;
 });
 
 function handleSearch() {
-  store.setFilters({ search: search.value });
+  store.setFilters({ search: search.value, page: 1 });
   store.fetchSamplings();
+}
+
+// Auto-search on input change with debounce
+let searchTimeout: number;
+function handleSearchInput() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    handleSearch();
+  }, 300);
+}
+
+// Pagination functions
+function goToPage(page: number) {
+  store.setFilters({ ...store.filters, page });
+  store.fetchSamplings();
+}
+
+function nextPage() {
+  if (pagination.value && pagination.value.current_page < pagination.value.last_page) {
+    goToPage(pagination.value.current_page + 1);
+  }
+}
+
+function prevPage() {
+  if (pagination.value && pagination.value.current_page > 1) {
+    goToPage(pagination.value.current_page - 1);
+  }
 }
 
 function openCreateDialog() {
@@ -132,6 +179,53 @@ async function updateSamplingHandler() {
   }
 }
 
+async function generateSamples(samplingId: number) {
+  try {
+    const result = await Swal.fire({
+      title: 'Generate Samples?',
+      text: 'This will create 30 sample records for this sampling. Continue?',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Generate',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (result.isConfirmed) {
+      await store.generateSamples(samplingId);
+      await store.fetchSamplings();
+      Swal.fire({ 
+        icon: 'success', 
+        title: 'Samples Generated!', 
+        text: '30 sample records have been created successfully.' 
+      });
+    }
+  } catch (error: any) {
+    if (error?.response?.status === 400) {
+      Swal.fire({ 
+        icon: 'warning', 
+        title: 'Samples Already Exist', 
+        text: error.response.data.message 
+      });
+    } else {
+      Swal.fire({ 
+        icon: 'error', 
+        title: 'Error', 
+        text: error?.message || 'Failed to generate samples.' 
+      });
+    }
+  }
+}
+
+function exportSamplingReport(samplingId: number) {
+  // Open the export URL in a new tab
+  window.open(route('samplings.export-report', samplingId), '_blank');
+}
+
+function printSamplingReport(samplingId: number) {
+  // Open the sampling report page in a new tab for printing
+  window.open(route('samplings.report', { sampling: samplingId }), '_blank');
+}
+
 onMounted(() => {
   store.fetchSamplings();
   investorStore.fetchInvestorsSelect();
@@ -144,8 +238,10 @@ onMounted(() => {
     <div class="flex flex-col gap-4 p-4">
       <div class="flex items-center justify-between gap-2">
         <div class="flex gap-2 items-center">
-          <Input v-model="search" placeholder="Search samplings..." @keyup.enter="handleSearch" class="w-64" />
-          <Button @click="handleSearch" variant="default">Search</Button>
+          <Input v-model="search" placeholder="Search samplings..." @input="handleSearchInput" class="w-64" />
+          <Button @click="handleSearch" variant="default" :disabled="isLoading">
+            {{ isLoading ? 'Searching...' : 'Search' }}
+          </Button>
         </div>
         <Button @click="openCreateDialog" variant="secondary">Create Sampling</Button>
       </div>
@@ -157,27 +253,125 @@ onMounted(() => {
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Sampling</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DOC</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cage No</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Samples</th>
               <th class="px-6 py-3"></th>
             </tr>
           </thead>
           <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-if="!samplings || !Array.isArray(samplings.data) || samplings.data.length === 0">
-              <td colspan="5" class="px-6 py-4 text-center text-gray-500">No samplings found.</td>
+            <tr v-if="isLoading">
+              <td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading samplings...</td>
             </tr>
-            <tr v-else v-for="s in samplings.data" :key="s?.id">
+            <tr v-else-if="!samplings || !Array.isArray(samplings) || samplings.length === 0">
+              <td colspan="6" class="px-6 py-4 text-center text-gray-500">No samplings found.</td>
+            </tr>
+            <tr v-else v-for="s in samplings" :key="s?.id">
               <td class="px-6 py-4 whitespace-nowrap">
-                {{ investors.find(i => i.id === s?.investor_id)?.name || s?.investor_id }}
+                {{ s?.investor?.name || investors.find(i => i.id === s?.investor_id)?.name || s?.investor_id }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">{{ s?.date_sampling }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ s?.doc }}</td>
               <td class="px-6 py-4 whitespace-nowrap">{{ s?.cage_no }}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                  {{ s?.samples_count || 0 }} samples
+                </span>
+              </td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
-                <Button variant="secondary" size="sm" @click="openEditDialog(s)" :disabled="!s?.id">Update</Button>
-                <Button variant="destructive" size="sm" @click="confirmDelete(s?.id)" :disabled="!s?.id">Delete</Button>
+                <div class="flex gap-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    @click="generateSamples(s?.id)" 
+                    :disabled="!s?.id"
+                    title="Generate Samples"
+                    class="w-8 h-8 p-0"
+                  >
+                    📊
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    @click="printSamplingReport(s?.id)" 
+                    :disabled="!s?.id"
+                    title="Print Report"
+                    class="w-8 h-8 p-0"
+                  >
+                    🖨️
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    @click="exportSamplingReport(s?.id)" 
+                    :disabled="!s?.id"
+                    title="Export to Excel"
+                    class="w-8 h-8 p-0"
+                  >
+                    📄
+                  </Button>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    @click="openEditDialog(s)" 
+                    :disabled="!s?.id"
+                    title="Update"
+                    class="w-8 h-8 p-0"
+                  >
+                    ✏️
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    @click="confirmDelete(s?.id)" 
+                    :disabled="!s?.id"
+                    title="Delete"
+                    class="w-8 h-8 p-0"
+                  >
+                    🗑️
+                  </Button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="pagination" class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center text-sm text-gray-700 dark:text-gray-300">
+          <span>Showing {{ pagination.from }} to {{ pagination.to }} of {{ pagination.total }} results</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            @click="prevPage" 
+            :disabled="pagination.current_page === 1"
+          >
+            Previous
+          </Button>
+          <div class="flex items-center space-x-1">
+            <template v-for="page in Math.min(5, pagination.last_page)" :key="page">
+              <Button 
+                v-if="page === 1 || page === pagination.last_page || (page >= pagination.current_page - 2 && page <= pagination.current_page + 2)"
+                variant="outline" 
+                size="sm" 
+                @click="goToPage(page)"
+                :class="page === pagination.current_page ? 'bg-primary text-primary-foreground' : ''"
+              >
+                {{ page }}
+              </Button>
+              <span v-else-if="page === pagination.current_page - 3 || page === pagination.current_page + 3" class="px-2">...</span>
+            </template>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            @click="nextPage" 
+            :disabled="pagination.current_page === pagination.last_page"
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
 

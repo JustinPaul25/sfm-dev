@@ -6,14 +6,19 @@ export const useFeedTypeStore = defineStore('feedType', () => {
     const feedTypes = ref([]);
     const loading = ref(false);
     const error = ref(null);
+    const filters = ref({
+        search: '',
+        page: 1
+    });
 
     const fetchFeedTypes = async () => {
         loading.value = true;
         error.value = null;
         try {
-            const response = await axios.get(route('feed-types.list'));
-            // Controller returns an array, not an object
-            feedTypes.value = response.data;
+            const response = await axios.get(route('feed-types.list'), {
+                params: filters.value
+            });
+            feedTypes.value = response.data.feedTypes;
         } catch (e) {
             error.value = e.message;
         } finally {
@@ -81,14 +86,20 @@ export const useFeedTypeStore = defineStore('feedType', () => {
         }
     };
 
+    const setFilters = (newFilters) => {
+        filters.value = { ...filters.value, ...newFilters };
+    };
+
     return {
         feedTypes,
         loading,
         error,
+        filters,
         fetchFeedTypes,
         createFeedType,
         updateFeedType,
         deleteFeedType,
         restoreFeedType,
+        setFilters,
     };
 }); 

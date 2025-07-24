@@ -8,7 +8,8 @@ export const useCageStore = defineStore('cage', () => {
     const loading = ref(false);
     const error = ref(null);
     const filters = ref({
-        search: ''
+        search: '',
+        page: 1
     });
 
     const fetchCages = async () => {
@@ -45,7 +46,7 @@ export const useCageStore = defineStore('cage', () => {
         error.value = null;
         try {
             const response = await axios.put(route('cages.update', id), cageData);
-            if (cages.value && Array.isArray(cages.value.data)) {
+            if (cages.value && cages.value.data && Array.isArray(cages.value.data)) {
                 const index = cages.value.data.findIndex(i => i.id === id);
                 if (index !== -1) {
                     cages.value.data[index] = response.data;

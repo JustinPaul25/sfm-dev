@@ -6,7 +6,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
 // import { BookOpen, Folder, LayoutGrid } from 'lucide-vue-next';
-import { LayoutGrid, Users, File, List } from 'lucide-vue-next';
+import { LayoutGrid, Users, File, List, BarChart3 } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const mainNavItems: NavItem[] = [
@@ -39,6 +39,11 @@ const mainNavItems: NavItem[] = [
         title: 'Cages',
         href: '/cages',
         icon: List,
+    },
+    {
+        title: 'Reports',
+        href: '/reports/overall',
+        icon: BarChart3,
     },
 ];
 

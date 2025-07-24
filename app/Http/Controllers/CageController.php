@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use App\Models\Cage;
+use App\Models\CageFeedConsumption;
 
 class CageController extends Controller
 {
@@ -27,8 +28,16 @@ class CageController extends Controller
         $cages = $query->paginate(10);
 
         return response()->json([
-            'cages' => $cages,
-            'filters' => $request->only(['search'])
+            'cages' => [
+                'data' => $cages->items(),
+                'current_page' => $cages->currentPage(),
+                'last_page' => $cages->lastPage(),
+                'per_page' => $cages->perPage(),
+                'total' => $cages->total(),
+                'from' => $cages->firstItem(),
+                'to' => $cages->lastItem(),
+            ],
+            'filters' => $request->only(['search', 'page'])
         ]);
     }
 
@@ -75,8 +84,109 @@ class CageController extends Controller
 
     public function show(Cage $cage)
     {
+        $cage->load(['feedType', 'investor', 'feedConsumptions']);
+        
         return Inertia::render('Cages/View', [
             'cage' => $cage
         ]);
+    }
+
+    public function getFeedConsumptions(Cage $cage)
+    {
+        try {
+            $consumptions = $cage->feedConsumptions()
+                ->orderBy('day_number')
+                ->get();
+
+            return response()->json([
+                'consumptions' => $consumptions
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error loading feed consumptions: ' . $e->getMessage(),
+                'error' => true
+            ], 500);
+        }
+    }
+
+    public function storeFeedConsumption(Request $request, Cage $cage)
+    {
+        try {
+            $request->validate([
+                'day_number' => 'required|integer|min:1',
+                'feed_amount' => 'required|numeric|min:0',
+                'consumption_date' => 'required|date',
+                'notes' => 'nullable|string',
+            ]);
+
+            // Check if consumption for this day already exists
+            $existing = CageFeedConsumption::where('cage_id', $cage->id)
+                ->where('day_number', $request->day_number)
+                ->first();
+
+            if ($existing) {
+                return response()->json([
+                    'message' => 'Feed consumption for day ' . $request->day_number . ' already exists',
+                    'error' => true
+                ], 422);
+            }
+
+            $consumption = CageFeedConsumption::create([
+                'cage_id' => $cage->id,
+                'day_number' => $request->day_number,
+                'feed_amount' => $request->feed_amount,
+                'consumption_date' => $request->consumption_date,
+                'notes' => $request->notes,
+            ]);
+
+            return response()->json([
+                'message' => 'Feed consumption recorded successfully',
+                'consumption' => $consumption
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error creating feed consumption: ' . $e->getMessage(),
+                'error' => true
+            ], 500);
+        }
+    }
+
+    public function updateFeedConsumption(Request $request, Cage $cage, CageFeedConsumption $consumption)
+    {
+        try {
+            $request->validate([
+                'feed_amount' => 'required|numeric|min:0',
+                'consumption_date' => 'required|date',
+                'notes' => 'nullable|string',
+            ]);
+
+            $consumption->update($request->all());
+
+            return response()->json([
+                'message' => 'Feed consumption updated successfully',
+                'consumption' => $consumption
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error updating feed consumption: ' . $e->getMessage(),
+                'error' => true
+            ], 500);
+        }
+    }
+
+    public function destroyFeedConsumption(Cage $cage, CageFeedConsumption $consumption)
+    {
+        try {
+            $consumption->delete();
+
+            return response()->json([
+                'message' => 'Feed consumption deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error deleting feed consumption: ' . $e->getMessage(),
+                'error' => true
+            ], 500);
+        }
     }
 } 

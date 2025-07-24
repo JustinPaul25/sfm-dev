@@ -57,8 +57,24 @@ const deleteTargetId = ref<number|null>(null);
 const showEditDialog = ref(false);
 const editCage = ref<Cage | null>(null);
 
-const feedTypes = computed<FeedType[]>(() => feedTypeStore.feedTypes as FeedType[]);
+const feedTypes = computed<FeedType[]>(() => {
+  const data = feedTypeStore.feedTypes as any;
+  return data?.data || [];
+});
 const investors = computed<Investor[]>(() => investorStore.investorsSelect as Investor[]);
+
+const cages = computed<Cage[]>(() => store.cages?.data || []);
+const pagination = computed(() => {
+  const data = store.cages as any;
+  return data?.current_page ? {
+    current_page: data.current_page,
+    last_page: data.last_page,
+    per_page: data.per_page,
+    total: data.total,
+    from: data.from,
+    to: data.to
+  } : null;
+});
 
 const newCage = ref<Pick<Cage, 'number_of_fingerlings' | 'feed_types_id' | 'investor_id'>>({
   number_of_fingerlings: 0,
@@ -87,51 +103,49 @@ const getWeatherIcon = (condition: string) => {
 
 const fetchLocationName = async (latitude: number, longitude: number) => {
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
-    const data = await response.json();
-    locationName.value = data.display_name || 'Unknown location';
+    // Use a CORS proxy or skip location fetching to avoid CORS issues
+    // For now, we'll skip the location API call and use a default location
+    locationName.value = 'Davao City, Philippines';
   } catch (error) {
-    locationName.value = 'Unavailable';
+    locationName.value = 'Davao City, Philippines';
   }
 };
 
 const fetchWeather = async () => {
   try {
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject);
-    });
-    const { latitude, longitude } = position.coords;
+    // Skip geolocation to avoid permission issues and use default location
+    const latitude = 7.305191; // Davao City coordinates
+    const longitude = 125.684569;
+    
     const response = await fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${latitude},${longitude}&apikey=mcJYe6rycCpzd19wEcIRQgB9ks13EgTY&units=metric`);
+    
+    if (!response.ok) {
+      throw new Error(`Weather API responded with status: ${response.status}`);
+    }
+    
     const data = await response.json();
-    weatherIcon.value = getWeatherIcon(data.data.values.weatherCode);
-    temperature.value = String(Math.round(data.data.values.temperature));
-    weatherDescription.value = data.data.values.weatherCode;
-    fetchLocationName(latitude, longitude);
-  } catch (error) {
-    console.error('Error fetching weather:', error);
-    // Always fallback to Davao City if geolocation fails
-    try {
-      const latitude = 7.305191;
-      const longitude = 125.684569;
-      const response = await fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${latitude},${longitude}&apikey=mcJYe6rycCpzd19wEcIRQgB9ks13EgTY&units=metric`);
-      const data = await response.json();
+    
+    if (data.data && data.data.values) {
       weatherIcon.value = getWeatherIcon(data.data.values.weatherCode);
       temperature.value = String(Math.round(data.data.values.temperature));
       weatherDescription.value = data.data.values.weatherCode;
-      fetchLocationName(latitude, longitude);
-    } catch (fallbackError) {
-      weatherIcon.value = '🌡️';
-      temperature.value = '--';
-      weatherDescription.value = 'Unavailable';
-      locationName.value = 'Unavailable';
+    } else {
+      throw new Error('Invalid weather data format');
     }
+    
+    fetchLocationName(latitude, longitude);
+  } catch (error) {
+    console.warn('Weather data unavailable:', error);
+    // Set default values without throwing errors
+    weatherIcon.value = '🌡️';
+    temperature.value = '--';
+    weatherDescription.value = 'Weather data unavailable';
+    locationName.value = 'Davao City, Philippines';
   }
 };
 
-// Initial fetch
+// Initial fetch - only once to avoid repeated API calls
 fetchWeather();
-// Update every 30 minutes
-setInterval(fetchWeather, 30 * 60 * 1000);
 
 const filteredCages = computed<Cage[]>(() => {
   if (!search.value) return store.cages?.data || [];
@@ -141,8 +155,38 @@ const filteredCages = computed<Cage[]>(() => {
 });
 
 function handleSearch() {
-  store.setFilters({ search: search.value });
+  store.setFilters({ search: search.value, page: 1 });
   store.fetchCages();
+}
+
+// Pagination functions
+function goToPage(page: number) {
+  store.setFilters({ ...store.filters, page });
+  store.fetchCages();
+}
+
+function getPageNumbers() {
+  if (!pagination.value) return [];
+  const current = pagination.value.current_page;
+  const last = pagination.value.last_page;
+  const pages = [];
+  
+  // Always show first page
+  pages.push(1);
+  
+  // Show pages around current page
+  for (let i = Math.max(2, current - 1); i <= Math.min(last - 1, current + 1); i++) {
+    if (i > 1 && i < last) {
+      pages.push(i);
+    }
+  }
+  
+  // Always show last page if different from first
+  if (last > 1) {
+    pages.push(last);
+  }
+  
+  return [...new Set(pages)].sort((a, b) => a - b);
 }
 
 function openCreateDialog() {
@@ -236,10 +280,13 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            <tr v-if="!store.cages || !store.cages.data || store.cages.data.length === 0">
+            <tr v-if="store.loading" class="animate-pulse">
+              <td colspan="4" class="px-6 py-4 text-center text-gray-500">Loading...</td>
+            </tr>
+            <tr v-else-if="cages.length === 0">
               <td colspan="4" class="px-6 py-4 text-center text-gray-500">No cages found.</td>
             </tr>
-            <tr v-else v-for="c in (store.cages?.data || [])" :key="c?.id">
+            <tr v-else v-for="c in cages" :key="c?.id">
               <td class="px-6 py-4 whitespace-nowrap">{{ c?.number_of_fingerlings }}</td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {{ feedTypes.find(f => f.id === c?.feed_types_id)?.feed_type || c?.feed_types_id }}
@@ -248,15 +295,79 @@ onMounted(() => {
                 {{ investors.find(i => i.id === c?.investor_id)?.name || c?.investor_id }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
-                <Link :href="`/cages/${c.id}/view`">
-                  <Button variant="outline" size="sm">View</Button>
-                </Link>
-                <Button variant="secondary" size="sm" @click="openEditDialog(c)" :disabled="!c?.id">Update</Button>
-                <Button variant="destructive" size="sm" @click="confirmDelete(c?.id)" :disabled="!c?.id">Delete</Button>
+                <div class="flex gap-1">
+                  <Link :href="`/cages/${c.id}/view`">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      title="View"
+                      class="w-8 h-8 p-0"
+                    >
+                      👁️
+                    </Button>
+                  </Link>
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    @click="openEditDialog(c)" 
+                    :disabled="!c?.id"
+                    title="Update"
+                    class="w-8 h-8 p-0"
+                  >
+                    ✏️
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    @click="confirmDelete(c?.id)" 
+                    :disabled="!c?.id"
+                    title="Delete"
+                    class="w-8 h-8 p-0"
+                  >
+                    🗑️
+                  </Button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="pagination" class="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center text-sm text-gray-700 dark:text-gray-300">
+          <span>Showing {{ pagination.from }} to {{ pagination.to }} of {{ pagination.total }} results</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === 1"
+            @click="goToPage(pagination.current_page - 1)"
+          >
+            Previous
+          </Button>
+          <div class="flex items-center space-x-1">
+            <Button 
+              v-for="page in getPageNumbers()" 
+              :key="page"
+              variant="outline" 
+              size="sm"
+              :class="page === pagination.current_page ? 'bg-primary text-primary-foreground' : ''"
+              @click="goToPage(page)"
+            >
+              {{ page }}
+            </Button>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            :disabled="pagination.current_page === pagination.last_page"
+            @click="goToPage(pagination.current_page + 1)"
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
 
