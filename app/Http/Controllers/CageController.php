@@ -87,7 +87,8 @@ class CageController extends Controller
         $cage->load(['feedType', 'investor', 'feedConsumptions']);
         
         return Inertia::render('Cages/View', [
-            'cage' => $cage
+            'cage' => $cage,
+            'feedConsumptions' => $cage->feedConsumptions()->orderBy('day_number')->get()
         ]);
     }
 
@@ -125,10 +126,9 @@ class CageController extends Controller
                 ->first();
 
             if ($existing) {
-                return response()->json([
-                    'message' => 'Feed consumption for day ' . $request->day_number . ' already exists',
-                    'error' => true
-                ], 422);
+                return back()->withErrors([
+                    'message' => 'Feed consumption for day ' . $request->day_number . ' already exists'
+                ]);
             }
 
             $consumption = CageFeedConsumption::create([
@@ -139,15 +139,11 @@ class CageController extends Controller
                 'notes' => $request->notes,
             ]);
 
-            return response()->json([
-                'message' => 'Feed consumption recorded successfully',
-                'consumption' => $consumption
-            ]);
+            return back()->with('success', 'Feed consumption recorded successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error creating feed consumption: ' . $e->getMessage(),
-                'error' => true
-            ], 500);
+            return back()->withErrors([
+                'message' => 'Error creating feed consumption: ' . $e->getMessage()
+            ]);
         }
     }
 
@@ -162,15 +158,11 @@ class CageController extends Controller
 
             $consumption->update($request->all());
 
-            return response()->json([
-                'message' => 'Feed consumption updated successfully',
-                'consumption' => $consumption
-            ]);
+            return back()->with('success', 'Feed consumption updated successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error updating feed consumption: ' . $e->getMessage(),
-                'error' => true
-            ], 500);
+            return back()->withErrors([
+                'message' => 'Error updating feed consumption: ' . $e->getMessage()
+            ]);
         }
     }
 
@@ -179,14 +171,11 @@ class CageController extends Controller
         try {
             $consumption->delete();
 
-            return response()->json([
-                'message' => 'Feed consumption deleted successfully'
-            ]);
+            return back()->with('success', 'Feed consumption deleted successfully');
         } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error deleting feed consumption: ' . $e->getMessage(),
-                'error' => true
-            ], 500);
+            return back()->withErrors([
+                'message' => 'Error deleting feed consumption: ' . $e->getMessage()
+            ]);
         }
     }
 } 

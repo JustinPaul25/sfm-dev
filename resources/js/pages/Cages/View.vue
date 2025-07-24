@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage, router } from '@inertiajs/vue3';
 import { ref, onMounted, computed } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import Button from '@/components/ui/button/Button.vue';
@@ -18,6 +18,9 @@ import DialogFooter from '@/components/ui/dialog/DialogFooter.vue';
 // Get cage data from Inertia props
 const props = defineProps<{
   cage: Cage;
+  feedConsumptions: FeedConsumption[];
+  errors?: any;
+  flash?: any;
 }>();
 
 const cageId = props.cage.id;
@@ -50,7 +53,7 @@ interface FeedConsumption {
 
 // Reactive data
 const cage = ref<Cage>(props.cage);
-const feedConsumptions = ref<FeedConsumption[]>([]);
+const feedConsumptions = ref<FeedConsumption[]>(props.feedConsumptions);
 const showAddDialog = ref(false);
 const showEditDialog = ref(false);
 const editingConsumption = ref<FeedConsumption | null>(null);
@@ -89,46 +92,29 @@ const loadCageData = async () => {
   // This method is kept for future use if needed
 };
 
-const loadFeedConsumptions = async () => {
-  try {
-    const response = await fetch(`/cages/${cageId}/feed-consumptions`, {
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
-    const data = await response.json();
-    feedConsumptions.value = data.consumptions;
-  } catch (error) {
-    console.error('Error loading feed consumptions:', error);
-  }
-};
+// Feed consumptions are now loaded from props, no need for separate loading function
 
 const addFeedConsumption = async () => {
   loading.value = true;
   try {
-    const response = await fetch(`/cages/${cageId}/feed-consumptions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-        'Accept': 'application/json',
+    await router.post(`/cages/${cageId}/feed-consumptions`, newConsumption.value, {
+      onSuccess: () => {
+        showAddDialog.value = false;
+        resetNewConsumption();
+        // Refresh the page to get updated data
+        router.reload();
       },
-      body: JSON.stringify(newConsumption.value)
+      onError: (errors) => {
+        const errorMessage = errors.message || Object.values(errors)[0] || 'Error adding feed consumption';
+        alert(errorMessage);
+      },
+      onFinish: () => {
+        loading.value = false;
+      }
     });
-
-    const data = await response.json();
-    
-    if (response.ok) {
-      await loadFeedConsumptions();
-      showAddDialog.value = false;
-      resetNewConsumption();
-    } else {
-      alert(data.message || 'Error adding feed consumption');
-    }
   } catch (error) {
     console.error('Error adding feed consumption:', error);
     alert('Error adding feed consumption');
-  } finally {
     loading.value = false;
   }
 };
@@ -138,29 +124,24 @@ const editFeedConsumption = async () => {
   
   loading.value = true;
   try {
-    const response = await fetch(`/cages/${cageId}/feed-consumptions/${editingConsumption.value.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-        'Accept': 'application/json',
+    await router.put(`/cages/${cageId}/feed-consumptions/${editingConsumption.value.id}`, editConsumption.value, {
+      onSuccess: () => {
+        showEditDialog.value = false;
+        editingConsumption.value = null;
+        // Refresh the page to get updated data
+        router.reload();
       },
-      body: JSON.stringify(editConsumption.value)
+      onError: (errors) => {
+        const errorMessage = errors.message || Object.values(errors)[0] || 'Error updating feed consumption';
+        alert(errorMessage);
+      },
+      onFinish: () => {
+        loading.value = false;
+      }
     });
-
-    const data = await response.json();
-    
-    if (response.ok) {
-      await loadFeedConsumptions();
-      showEditDialog.value = false;
-      editingConsumption.value = null;
-    } else {
-      alert(data.message || 'Error updating feed consumption');
-    }
   } catch (error) {
     console.error('Error updating feed consumption:', error);
     alert('Error updating feed consumption');
-  } finally {
     loading.value = false;
   }
 };
@@ -171,19 +152,16 @@ const deleteFeedConsumption = async (consumption: FeedConsumption) => {
   }
 
   try {
-    const response = await fetch(`/cages/${cageId}/feed-consumptions/${consumption.id}`, {
-      method: 'DELETE',
-      headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-        'Accept': 'application/json',
+    await router.delete(`/cages/${cageId}/feed-consumptions/${consumption.id}`, {
+      onSuccess: () => {
+        // Refresh the page to get updated data
+        router.reload();
+      },
+      onError: (errors) => {
+        const errorMessage = errors.message || Object.values(errors)[0] || 'Error deleting feed consumption';
+        alert(errorMessage);
       }
     });
-
-    if (response.ok) {
-      await loadFeedConsumptions();
-    } else {
-      alert('Error deleting feed consumption');
-    }
   } catch (error) {
     console.error('Error deleting feed consumption:', error);
     alert('Error deleting feed consumption');
@@ -201,8 +179,13 @@ const openEditDialog = (consumption: FeedConsumption) => {
 };
 
 const resetNewConsumption = () => {
+  // Calculate the next day number based on existing consumptions
+  const maxDay = feedConsumptions.value.length > 0 
+    ? Math.max(...feedConsumptions.value.map(c => c.day_number))
+    : 0;
+    
   newConsumption.value = {
-    day_number: feedConsumptions.value.length + 1,
+    day_number: maxDay + 1,
     feed_amount: '',
     consumption_date: new Date().toISOString().split('T')[0],
     notes: ''
@@ -211,8 +194,7 @@ const resetNewConsumption = () => {
 
 // Lifecycle
 onMounted(() => {
-  loadCageData();
-  loadFeedConsumptions();
+  // Cage data and feed consumptions are already loaded from props
 });
 </script>
 
