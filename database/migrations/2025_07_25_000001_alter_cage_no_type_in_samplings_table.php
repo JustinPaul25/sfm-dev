@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -11,11 +12,16 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // First, clean up any non-numeric data in cage_no (MySQL syntax)
+        DB::statement("UPDATE samplings SET cage_no = NULL WHERE cage_no NOT REGEXP '^[0-9]+$'");
+        
         // Change cage_no from string to unsignedBigInteger
         Schema::table('samplings', function (Blueprint $table) {
-            // If you have existing data, you may need to cast or clean it first
             $table->unsignedBigInteger('cage_no')->change();
-            // Optionally add a foreign key constraint
+        });
+        
+        // Add foreign key constraint
+        Schema::table('samplings', function (Blueprint $table) {
             $table->foreign('cage_no')->references('id')->on('cages')->onDelete('cascade');
         });
     }
