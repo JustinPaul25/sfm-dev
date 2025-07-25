@@ -26,11 +26,6 @@ const mainNavItems: NavItem[] = [
         icon: File,
     },
     {
-        title: 'Sampling Report',
-        href: '/samplings/report',
-        icon: File,
-    },
-    {
         title: 'Feed Types',
         href: '/feed-types',
         icon: List,
