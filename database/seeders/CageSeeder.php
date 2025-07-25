@@ -74,11 +74,19 @@ class CageSeeder extends Seeder
             ], $cageData);
         }
 
-        // Create additional cages using factory
-        Cage::factory(15)->create([
-            'investor_id' => $investors->random()->id,
-            'feed_types_id' => $feedTypes->random()->id,
-        ]);
+        // Create additional cages without factory (for production)
+        for ($i = 0; $i < 15; $i++) {
+            $randomInvestor = $investors->random();
+            $randomFeedType = $feedTypes->random();
+            $fingerlingCount = rand(500, 3000);
+            
+            Cage::firstOrCreate([
+                'investor_id' => $randomInvestor->id,
+                'number_of_fingerlings' => $fingerlingCount,
+            ], [
+                'feed_types_id' => $randomFeedType->id,
+            ]);
+        }
 
         // Create cages with realistic fingerling counts
         $realisticFingerlingCounts = [500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000];

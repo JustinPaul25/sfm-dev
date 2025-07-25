@@ -83,8 +83,26 @@ class FeedTypeSeeder extends Seeder
             ], $feedTypeData);
         }
 
-        // Create additional feed types using factory
-        FeedType::factory(10)->create();
+        // Create additional feed types without factory (for production)
+        $additionalFeedTypes = [
+            ['feed_type' => 'Juvenile Feed', 'brand' => 'YoungFish'],
+            ['feed_type' => 'Adult Feed', 'brand' => 'MatureFish'],
+            ['feed_type' => 'Breeding Feed', 'brand' => 'BreedPro'],
+            ['feed_type' => 'Winter Feed', 'brand' => 'ColdFish'],
+            ['feed_type' => 'Summer Feed', 'brand' => 'WarmFish'],
+            ['feed_type' => 'Disease Prevention Feed', 'brand' => 'PreventFish'],
+            ['feed_type' => 'Growth Enhancement Feed', 'brand' => 'GrowPro'],
+            ['feed_type' => 'Color Enhancement Feed', 'brand' => 'ColorPro'],
+            ['feed_type' => 'Digestive Health Feed', 'brand' => 'DigestPro'],
+            ['feed_type' => 'Immune Boost Feed', 'brand' => 'ImmunePro'],
+        ];
+
+        foreach ($additionalFeedTypes as $feedTypeData) {
+            FeedType::firstOrCreate([
+                'feed_type' => $feedTypeData['feed_type'],
+                'brand' => $feedTypeData['brand'],
+            ], $feedTypeData);
+        }
 
         $this->command->info('Feed Types seeded successfully!');
         $this->command->info('Created ' . count($feedTypes) . ' specific feed types and 10 random feed types.');

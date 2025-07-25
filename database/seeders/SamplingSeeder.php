@@ -64,11 +64,21 @@ class SamplingSeeder extends Seeder
             ], $samplingData);
         }
 
-        // Create additional samplings using factory
-        Sampling::factory(20)->create([
-            'investor_id' => $investors->random()->id,
-            'cage_no' => $cages->random()->id,
-        ]);
+        // Create additional samplings without factory (for production)
+        for ($i = 0; $i < 20; $i++) {
+            $randomInvestor = $investors->random();
+            $randomCage = $cages->where('investor_id', $randomInvestor->id)->first();
+            
+            if ($randomCage) {
+                Sampling::firstOrCreate([
+                    'investor_id' => $randomInvestor->id,
+                    'date_sampling' => now()->subDays(rand(1, 60)),
+                ], [
+                    'cage_no' => $randomCage->id,
+                    'doc' => 'DOC-FACTORY-' . str_pad($i + 1, 3, '0', STR_PAD_LEFT),
+                ]);
+            }
+        }
 
         // Create historical samplings for the last 3 months
         for ($i = 1; $i <= 90; $i++) {

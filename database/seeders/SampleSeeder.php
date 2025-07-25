@@ -45,11 +45,25 @@ class SampleSeeder extends Seeder
             }
         }
 
-        // Create additional samples using factory
-        Sample::factory(100)->create([
-            'investor_id' => $investors->random()->id,
-            'sampling_id' => $samplings->random()->id,
-        ]);
+        // Create additional samples without factory (for production)
+        for ($i = 0; $i < 100; $i++) {
+            $randomSampling = $samplings->random();
+            $randomInvestor = $investors->random();
+            
+            // Generate realistic weight data
+            $daysSinceStart = now()->diffInDays($randomSampling->sampling_date);
+            $baseWeight = 50 + ($daysSinceStart * 2);
+            $variation = rand(-30, 30);
+            $weight = max(30, $baseWeight + $variation);
+            
+            Sample::firstOrCreate([
+                'investor_id' => $randomInvestor->id,
+                'sampling_id' => $randomSampling->id,
+                'sample_no' => rand(51, 100), // Different sample numbers
+            ], [
+                'weight' => $weight,
+            ]);
+        }
 
         // Create samples with specific weight ranges for testing
         $weightRanges = [
