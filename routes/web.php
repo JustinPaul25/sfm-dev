@@ -4,6 +4,7 @@ use App\Http\Controllers\InvestorController;
 use App\Http\Controllers\SamplingController;
 use App\Http\Controllers\FeedTypeController;
 use App\Http\Controllers\CageController;
+use App\Http\Controllers\CageFeedingScheduleController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
@@ -59,6 +60,15 @@ Route::middleware(['auth'])->group(function () {
     Route::post('cages/{cage}/feed-consumptions', [CageController::class, 'storeFeedConsumption'])->name('cages.feed-consumptions.store');
     Route::put('cages/{cage}/feed-consumptions/{consumption}', [CageController::class, 'updateFeedConsumption'])->name('cages.feed-consumptions.update');
     Route::delete('cages/{cage}/feed-consumptions/{consumption}', [CageController::class, 'destroyFeedConsumption'])->name('cages.feed-consumptions.destroy');
+
+    // Cage Feeding Schedule Routes
+    Route::get('cages/feeding-schedules', [CageFeedingScheduleController::class, 'index'])->name('cages.feeding-schedules');
+    Route::post('cages/feeding-schedules', [CageFeedingScheduleController::class, 'store'])->name('cages.feeding-schedules.store');
+    Route::post('cages/feeding-schedules/auto-generate', [CageFeedingScheduleController::class, 'autoGenerate'])->name('cages.feeding-schedules.auto-generate');
+    Route::put('cages/feeding-schedules/{schedule}', [CageFeedingScheduleController::class, 'update'])->name('cages.feeding-schedules.update');
+    Route::delete('cages/feeding-schedules/{schedule}', [CageFeedingScheduleController::class, 'destroy'])->name('cages.feeding-schedules.destroy');
+    Route::post('cages/feeding-schedules/{schedule}/activate', [CageFeedingScheduleController::class, 'activate'])->name('cages.feeding-schedules.activate');
+    Route::get('cages/feeding-schedules/today', [CageFeedingScheduleController::class, 'getTodaySchedule'])->name('cages.feeding-schedules.today');
 
     // ReportsController
     Route::get('reports', [ReportsController::class, 'index'])->name('reports.index');

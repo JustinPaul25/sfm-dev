@@ -96,36 +96,74 @@ class SamplingController extends Controller
         $samplingId = $request->get('sampling');
         
         if ($samplingId) {
-            // Get specific sampling data
+            // Get specific sampling data with cage information
             $sampling = Sampling::with(['investor', 'samples'])->find($samplingId);
             
             if ($sampling) {
+                // Get cage information for accurate biomass calculation
+                $cage = \App\Models\Cage::where('id', $sampling->cage_no)->first();
+                $numberOfFish = $cage ? $cage->number_of_fingerlings : 5000; // Fallback to default
+                
                 // Calculate summary statistics
                 $samples = $sampling->samples;
                 $totalWeight = $samples->sum('weight');
                 $totalSamples = $samples->count();
                 $avgWeight = $totalSamples > 0 ? round($totalWeight / $totalSamples, 2) : 0;
                 
-                // Get historical data for this investor
+                // Calculate biomass (kg) = (Average Body Weight × Number of Fish) / 1000
+                $biomass = round(($avgWeight * $numberOfFish) / 1000, 2);
+                
+                // Get previous sampling for comparison
+                $previousSampling = Sampling::with('samples')
+                    ->where('investor_id', $sampling->investor_id)
+                    ->where('date_sampling', '<', $sampling->date_sampling)
+                    ->orderBy('date_sampling', 'desc')
+                    ->first();
+                
+                $prevABW = 0;
+                $prevBiomass = 0;
+                $totalWtGained = 0;
+                $dailyWtGained = 0;
+                
+                if ($previousSampling) {
+                    $prevSamples = $previousSampling->samples;
+                    $prevTotalWeight = $prevSamples->sum('weight');
+                    $prevTotalSamples = $prevSamples->count();
+                    $prevABW = $prevTotalSamples > 0 ? round($prevTotalWeight / $prevTotalSamples, 2) : 0;
+                    $prevBiomass = round(($prevABW * $numberOfFish) / 1000, 2);
+                    
+                    // Calculate weight gained
+                    $totalWtGained = round($biomass - $prevBiomass, 2);
+                    
+                    // Calculate daily weight gained
+                    $daysBetween = \Carbon\Carbon::parse($previousSampling->date_sampling)
+                        ->diffInDays(\Carbon\Carbon::parse($sampling->date_sampling));
+                    $dailyWtGained = $daysBetween > 0 ? round($totalWtGained / $daysBetween, 2) : 0;
+                }
+                
+                // Get historical data for this investor with enhanced biomass calculations
                 $historicalSamplings = Sampling::with('samples')
                     ->where('investor_id', $sampling->investor_id)
                     ->orderBy('date_sampling', 'asc')
                     ->get()
-                    ->map(function ($s) {
+                    ->map(function ($s) use ($numberOfFish) {
                         $samples = $s->samples;
                         $totalWeight = $samples->sum('weight');
                         $totalSamples = $samples->count();
                         $avgWeight = $totalSamples > 0 ? round($totalWeight / $totalSamples, 2) : 0;
                         
+                        // Calculate biomass for each historical sampling
+                        $biomass = round(($avgWeight * $numberOfFish) / 1000, 2);
+                        
                         return [
                             'date' => $s->date_sampling,
                             'doc' => $s->doc,
-                            'stocks' => 5000, // Default value, can be enhanced later
-                            'mortality' => 0, // Default value, can be enhanced later
-                            'present' => 5000, // Default value, can be enhanced later
+                            'stocks' => $numberOfFish,
+                            'mortality' => 0, // Can be enhanced with actual mortality tracking
+                            'present' => $numberOfFish,
                             'abw' => $avgWeight,
                             'wtInc' => 0, // Can be calculated from previous sampling
-                            'biomass' => round(($avgWeight * 5000) / 1000, 2), // kg
+                            'biomass' => $biomass,
                             'fr' => '3%', // Default value
                             'dfr' => 32, // Default value
                             'feed' => 0, // Default value
@@ -147,17 +185,17 @@ class SamplingController extends Controller
                         'totalWeight' => $totalWeight,
                         'totalSamples' => $totalSamples,
                         'avgWeight' => $avgWeight,
-                        'totalStocks' => 5000, // Default value
-                        'mortality' => 0, // Default value
-                        'presentStocks' => 5000, // Default value
-                        'biomass' => round(($avgWeight * 5000) / 1000, 2), // kg
+                        'totalStocks' => $numberOfFish,
+                        'mortality' => 0, // Can be enhanced with actual mortality tracking
+                        'presentStocks' => $numberOfFish,
+                        'biomass' => $biomass,
                         'feedingRate' => 3, // Default value
                         'dailyFeedRation' => 32, // Default value
                         'feedConsumption' => 0, // Default value
-                        'prevABW' => 0, // Can be calculated from previous sampling
-                        'prevBiomass' => 0, // Can be calculated
-                        'totalWtGained' => 0, // Can be calculated
-                        'dailyWtGained' => 0, // Can be calculated
+                        'prevABW' => $prevABW,
+                        'prevBiomass' => $prevBiomass,
+                        'totalWtGained' => $totalWtGained,
+                        'dailyWtGained' => $dailyWtGained,
                         'fcr' => 0, // Can be calculated
                     ],
                     'history' => $historicalSamplings,

@@ -85,7 +85,7 @@ class CageSeeder extends Seeder
                 'number_of_fingerlings' => $fingerlingCount,
             ], [
                 'feed_types_id' => $randomFeedType->id,
-            ]);
+        ]);
         }
 
         // Create cages with realistic fingerling counts

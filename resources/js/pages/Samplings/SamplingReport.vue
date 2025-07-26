@@ -83,6 +83,19 @@ const organizedSamples = computed(() => {
   return organized;
 });
 
+// Computed property for biomass analysis
+const biomassAnalysis = computed(() => {
+  const totals = report.value.totals;
+  const biomassPerFish = totals.totalStocks > 0 ? (totals.biomass * 1000) / totals.totalStocks : 0;
+  const biomassGrowthRate = totals.prevBiomass > 0 ? ((totals.biomass - totals.prevBiomass) / totals.prevBiomass) * 100 : 0;
+  
+  return {
+    biomassPerFish: biomassPerFish.toFixed(2),
+    biomassGrowthRate: biomassGrowthRate.toFixed(1),
+    biomassEfficiency: totals.avgWeight > 0 ? (totals.biomass / totals.avgWeight * 1000).toFixed(2) : '0.00'
+  };
+});
+
 const breadcrumbs = [
   { title: 'Dashboard', href: '/dashboard' },
   { title: 'Samplings', href: '/samplings' },
@@ -158,6 +171,8 @@ const exportToExcel = () => {
               <li>Mortality to date: <span class="font-medium">{{ report.totals.mortality }} pcs</span></li>
               <li>Present Stocks: <span class="font-medium">{{ report.totals.presentStocks }} pcs</span></li>
               <li>Biomass: <span class="font-medium">{{ report.totals.biomass }} kgs</span></li>
+              <li>Biomass per Fish: <span class="font-medium">{{ biomassAnalysis.biomassPerFish }}g</span></li>
+              <li v-if="report.totals.prevBiomass > 0">Biomass Growth Rate: <span class="font-medium text-green-600">{{ biomassAnalysis.biomassGrowthRate }}%</span></li>
               <li>Feeding Rate: <span class="font-medium">{{ report.totals.feedingRate }}%</span></li>
               <li>Daily Feed Ration: <span class="font-medium">{{ report.totals.dailyFeedRation }} kgs</span></li>
               <li>Feed Consumption: <span class="font-medium">{{ report.totals.feedConsumption }} kgs</span></li>
@@ -169,10 +184,38 @@ const exportToExcel = () => {
             </ul>
           </div>
           <div class="flex flex-col items-center justify-center">
-            <h3 class="font-semibold mb-2">Weight Increment Chart</h3>
-            <div class="w-full h-48 flex items-center justify-center bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 text-gray-400">
-              <!-- Chart placeholder -->
-              <span>Chart coming soon...</span>
+            <h3 class="font-semibold mb-2">Biomass Analysis</h3>
+            <div class="w-full space-y-4">
+              <!-- Biomass Trend -->
+              <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                <h4 class="font-medium text-blue-900 dark:text-blue-100 mb-2">Current Biomass</h4>
+                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ report.totals.biomass }} kg</div>
+                <div class="text-sm text-blue-700 dark:text-blue-300">
+                  {{ report.totals.totalStocks }} fish × {{ report.totals.avgWeight }}g avg weight
+                </div>
+              </div>
+              
+              <!-- Biomass Growth -->
+              <div v-if="report.totals.prevBiomass > 0" class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                <h4 class="font-medium text-green-900 dark:text-green-100 mb-2">Biomass Growth</h4>
+                <div class="text-lg font-bold text-green-600 dark:text-green-400">
+                  +{{ report.totals.totalWtGained }} kg
+                </div>
+                <div class="text-sm text-green-700 dark:text-green-300">
+                  {{ report.totals.dailyWtGained }} kg/day average
+                </div>
+              </div>
+              
+              <!-- Biomass Efficiency -->
+              <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                <h4 class="font-medium text-purple-900 dark:text-purple-100 mb-2">Biomass per Fish</h4>
+                <div class="text-lg font-bold text-purple-600 dark:text-purple-400">
+                  {{ ((report.totals.biomass * 1000) / report.totals.totalStocks).toFixed(2) }}g
+                </div>
+                <div class="text-sm text-purple-700 dark:text-purple-300">
+                  Average weight per fish
+                </div>
+              </div>
             </div>
           </div>
         </div>

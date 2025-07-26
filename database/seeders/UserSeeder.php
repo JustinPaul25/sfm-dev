@@ -54,9 +54,9 @@ class UserSeeder extends Seeder
                 'email' => $userData['email'],
             ], [
                 'name' => $userData['name'],
-                'email_verified_at' => now(),
+            'email_verified_at' => now(),
                 'password' => Hash::make($userData['password']),
-            ]);
+        ]);
         }
 
         // Create unverified users for testing email verification
@@ -71,9 +71,9 @@ class UserSeeder extends Seeder
                 'email' => $userData['email'],
             ], [
                 'name' => $userData['name'],
-                'email_verified_at' => null,
+            'email_verified_at' => null,
                 'password' => Hash::make($userData['password']),
-            ]);
+        ]);
         }
 
         $this->command->info('Users seeded successfully!');

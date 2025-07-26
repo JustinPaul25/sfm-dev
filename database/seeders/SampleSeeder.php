@@ -62,7 +62,7 @@ class SampleSeeder extends Seeder
                 'sample_no' => rand(51, 100), // Different sample numbers
             ], [
                 'weight' => $weight,
-            ]);
+        ]);
         }
 
         // Create samples with specific weight ranges for testing

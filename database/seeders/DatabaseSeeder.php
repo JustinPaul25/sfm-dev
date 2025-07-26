@@ -27,6 +27,7 @@ class DatabaseSeeder extends Seeder
             InvestorSeeder::class,
             FeedTypeSeeder::class,
             CageSeeder::class,
+            CageFeedingScheduleSeeder::class,
             SamplingSeeder::class,
             SampleSeeder::class,
             CageFeedConsumptionSeeder::class,

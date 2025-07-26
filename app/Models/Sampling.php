@@ -22,4 +22,8 @@ class Sampling extends Model
     public function samples() {
         return $this->hasMany(Sample::class);
     }
+
+    public function cage() {
+        return $this->belongsTo(Cage::class, 'cage_no');
+    }
 }

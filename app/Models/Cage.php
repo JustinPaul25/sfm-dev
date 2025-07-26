@@ -25,4 +25,12 @@ class Cage extends Model
     public function feedConsumptions() {
         return $this->hasMany(CageFeedConsumption::class);
     }
+
+    public function feedingSchedule() {
+        return $this->hasOne(CageFeedingSchedule::class)->where('is_active', true);
+    }
+
+    public function feedingSchedules() {
+        return $this->hasMany(CageFeedingSchedule::class);
+    }
 } 
