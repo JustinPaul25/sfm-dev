@@ -10,13 +10,23 @@ return new class extends Migration
     public function up(): void
     {
         // Check if the constraint exists before trying to drop it
-        $constraints = DB::select("
-            SELECT CONSTRAINT_NAME 
-            FROM information_schema.TABLE_CONSTRAINTS 
-            WHERE TABLE_SCHEMA = DATABASE() 
-            AND TABLE_NAME = 'cage_feeding_schedules' 
-            AND CONSTRAINT_NAME = 'unique_active_schedule_per_cage'
-        ");
+        if (DB::getDriverName() === 'pgsql') {
+            $constraints = DB::select("
+                SELECT CONSTRAINT_NAME 
+                FROM information_schema.TABLE_CONSTRAINTS 
+                WHERE TABLE_SCHEMA = current_schema() 
+                AND TABLE_NAME = 'cage_feeding_schedules' 
+                AND CONSTRAINT_NAME = 'unique_active_schedule_per_cage'
+            ");
+        } else {
+            $constraints = DB::select("
+                SELECT CONSTRAINT_NAME 
+                FROM information_schema.TABLE_CONSTRAINTS 
+                WHERE TABLE_SCHEMA = DATABASE() 
+                AND TABLE_NAME = 'cage_feeding_schedules' 
+                AND CONSTRAINT_NAME = 'unique_active_schedule_per_cage'
+            ");
+        }
         
         if (!empty($constraints)) {
             Schema::table('cage_feeding_schedules', function (Blueprint $table) {
